@@ -2,6 +2,8 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
+"declaracion de constantes para el sistema"
+
 package pkg_system is
     constant CLK_HZ        : positive := 50_000_000;
     constant DATA_WIDTH    : positive := 8;
@@ -24,6 +26,9 @@ end package;
 package body pkg_system is
     function hex7(value : std_logic_vector(3 downto 0)) return seg7_t is
     begin
+
+"definicion de cada combinacion que se vera reflejada en el display 7 segmentos"
+
         case value is
             when x"0" => return "1000000";
             when x"1" => return "1111001";
