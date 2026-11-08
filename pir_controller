@@ -1,0 +1,51 @@
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+use work.pkg_system.all;
+
+"declaracion de la entidad"
+
+entity pir_controller is
+    generic (G_FILTER_CYCLES : positive := FILTER_CYCLES);
+    port (clk, rst, pir_in : in std_logic;
+          pir_level, event_pulse : out std_logic);
+end entity;
+
+architecture rtl of pir_controller is
+    signal sync_pipe : std_logic_vector(2 downto 0);
+    signal filtered : std_logic;
+    signal stable_count : natural range 0 to G_FILTER_CYCLES-1;
+    attribute altera_attribute : string;
+    attribute altera_attribute of sync_pipe : signal is
+        "-name SYNCHRONIZER_IDENTIFICATION FORCED_IF_ASYNCHRONOUS";
+begin
+    pir_level <= filtered;
+    process(clk)
+    begin
+        if rising_edge(clk) then
+            if rst = '1' then
+                sync_pipe <= (others => '0');
+                filtered <= '0';
+                stable_count <= 0;
+                event_pulse <= '0';
+            else
+                sync_pipe <= sync_pipe(1 downto 0) & pir_in;
+                event_pulse <= '0';
+                if sync_pipe(2) = filtered then
+                    stable_count <= 0;
+                elsif stable_count = G_FILTER_CYCLES-1 then
+                    stable_count <= 0;
+                    filtered <= sync_pipe(2);
+                    
+"se generara un pulso solamente al pasar de nivel filtrado 0 a 1, es decir, de manera ascendente."
+
+                    if sync_pipe(2) = '1' then
+                        event_pulse <= '1';
+                    end if;
+                else
+                    stable_count <= stable_count + 1;
+                end if;
+            end if;
+        end if;
+    end process;
+end architecture;
