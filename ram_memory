@@ -1,0 +1,31 @@
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+use work.pkg_system.all;   "permite llamar condiciones definidas en ese modulo y uzar las mismas especificaciones para el modulo rom"
+
+entity ram_memory is
+    port (clk, we : in std_logic;
+          wr_addr, rd_addr : in addr_t;
+          d : in data_t;
+          q : out data_t);
+end entity;
+
+architecture rtl of ram_memory is
+    signal mem : memory_t;
+begin
+
+"RAM de doble puerto simple: una escritura y una lectura por reloj."
+"No se borra el arreglo con reset para permitir inferencia de RAM."
+"En simulacion, lectura y escritura simultaneas a igual direccion"
+"devuelven el dato anterior. El top oculta datos hasta su validacion."
+
+    process(clk)
+    begin
+        if rising_edge(clk) then  "indica que se ejecutara en flanco ascendente de reloj"
+            if we = '1' then
+                mem(to_integer(wr_addr)) <= d;
+            end if;
+            q <= mem(to_integer(rd_addr));
+        end if;
+    end process;
+end architecture;
