@@ -1,0 +1,22 @@
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+use work.pkg_system.all;      "llamamos este modulo para aso evitar volver a definir aspectos que ya definimos en pgk_system."
+
+entity rom_memory is
+    port (clk, en : in std_logic;
+          addr : in addr_t;
+          q : out data_t);
+end entity;
+
+architecture rtl of rom_memory is
+begin
+    process(clk)
+    begin
+        if rising_edge(clk) then
+            if en = '1' then
+                q <= ROM_CONTENT(to_integer(addr));
+            end if;
+        end if;
+    end process;
+end architecture;
