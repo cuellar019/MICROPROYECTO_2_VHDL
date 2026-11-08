@@ -1,0 +1,81 @@
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+use work.pkg_system.all;
+
+"la entidad define todas las señales que permiten comunicar este modulo con todos los demas"
+
+entity control_unit is
+    port (clk, rst, event_pulse : in std_logic;
+          rom_en, ram_we, busy, full : out std_logic;
+          rom_addr, ram_wr_addr, last_addr : out addr_t;
+          event_count : out count_t;
+          accepted_toggle : out std_logic);    "indicador de que termino de procesar un evento"
+end entity;
+
+architecture rtl of control_unit is
+    signal state, next_state : state_t := WAIT_EVENT;
+    signal wr_ptr, last_ptr : addr_t := (others => '0');
+    signal count : count_t := (others => '0');
+    signal toggle_reg : std_logic;
+begin
+    rom_addr <= wr_ptr;
+    ram_wr_addr <= wr_ptr;
+    last_addr <= last_ptr;
+    event_count <= count;
+    full <= '1' when count = to_unsigned(MEM_DEPTH, count'length) else '0';
+    accepted_toggle <= toggle_reg;
+
+    process(state, event_pulse, count, rst)
+    begin
+        next_state <= state;
+        rom_en <= '0';
+        ram_we <= '0';
+        busy <= '0';
+        if rst = '0' then
+            case state is
+                when WAIT_EVENT =>
+                    if event_pulse = '1' and count < to_unsigned(MEM_DEPTH, count'length) then
+                        next_state <= READ_ROM;
+                    end if;
+                when READ_ROM =>
+                    busy <= '1';
+                    rom_en <= '1';
+                    next_state <= WRITE_RAM;
+                when WRITE_RAM =>
+                    busy <= '1';
+                    ram_we <= '1';
+                    next_state <= UPDATE_POINTERS;
+                when UPDATE_POINTERS =>
+                    busy <= '1';
+                    next_state <= WAIT_EVENT;
+            end case;
+        else
+            next_state <= WAIT_EVENT;
+        end if;
+    end process;
+
+    process(clk)
+    begin
+        if rising_edge(clk) then
+            if rst = '1' then
+                state <= WAIT_EVENT;
+                wr_ptr <= (others => '0');
+                last_ptr <= (others => '0');
+                count <= (others => '0');
+                toggle_reg <= '0';
+            else
+                state <= next_state;
+                if state = UPDATE_POINTERS then
+                    -- El dato ya se escribio en el flanco anterior.
+                    last_ptr <= wr_ptr;
+                    count <= count + 1;
+                    toggle_reg <= not toggle_reg;
+                    if wr_ptr < to_unsigned(MEM_DEPTH-1, wr_ptr'length) then
+                        wr_ptr <= wr_ptr + 1;
+                    end if;
+                end if;
+            end if;
+        end if;
+    end process;
+end architecture;
