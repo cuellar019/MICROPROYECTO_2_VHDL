@@ -9,17 +9,19 @@ package pkg_system is
     constant DATA_WIDTH    : positive := 8;
     constant ADDR_WIDTH    : positive := 4;
     constant MEM_DEPTH     : positive := 2**ADDR_WIDTH;
-    constant FILTER_CYCLES : positive := CLK_HZ / 100; -- 10 ms
+    constant FILTER_CYCLES : positive := CLK_HZ / 100;       "10 ms"
     subtype data_t is std_logic_vector(DATA_WIDTH-1 downto 0);
     subtype addr_t is unsigned(ADDR_WIDTH-1 downto 0);
-    subtype count_t is unsigned(ADDR_WIDTH downto 0); -- representa 0..16
+    subtype count_t is unsigned(ADDR_WIDTH downto 0);        "representa 0..16"
     subtype seg7_t is std_logic_vector(6 downto 0);
     type memory_t is array (0 to MEM_DEPTH-1) of data_t;
     type state_t is (WAIT_EVENT, READ_ROM, WRITE_RAM, UPDATE_POINTERS);
     constant ROM_CONTENT : memory_t := (
         x"11", x"22", x"33", x"44", x"55", x"66", x"77", x"88",
         x"99", x"AA", x"BB", x"CC", x"DD", x"EE", x"F0", x"0F");
-    -- Bits g,f,e,d,c,b,a. Los segmentos se encienden con '0'.
+
+" Bits g,f,e,d,c,b,a. Los segmentos se encienden con '0'."
+
     function hex7(value : std_logic_vector(3 downto 0)) return seg7_t;
 end package;
 
