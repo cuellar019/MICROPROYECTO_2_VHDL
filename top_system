@@ -1,0 +1,114 @@
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+use work.pkg_system.all;
+
+entity top_system is
+    generic (G_FILTER_CYCLES : positive := FILTER_CYCLES);
+    port (CLOCK_50 : in std_logic;
+          BUTTON : in std_logic_vector(0 downto 0);
+          SW : in std_logic_vector(9 downto 0);
+          pir_in : in std_logic;
+          LEDG : out std_logic_vector(9 downto 0);
+          HEX0_D, HEX1_D, HEX2_D, HEX3_D : out seg7_t;
+          HEX0_DP, HEX1_DP, HEX2_DP, HEX3_DP : out std_logic);
+end entity;
+
+"utilizamos una arquitectura estructural, ya que el modulo no desarrolla toda la logica, si no, que conecta diferentes modulos.        "
+
+architecture structural of top_system is
+    -- Reset sincrono. Inicializacion de la cadena mantiene reset al arrancar.
+    signal rst_pipe : std_logic_vector(1 downto 0) := (others => '1');
+    signal rst : std_logic;
+    signal sw_meta, sw_sync : std_logic_vector(9 downto 0);
+    signal pir_level, event_pulse, rom_en, ram_we, busy, full : std_logic;
+    signal accepted_toggle, display_valid : std_logic;
+    signal rom_addr, wr_addr, last_addr, rd_addr, display_addr : addr_t;
+    signal event_count : count_t;
+    signal rom_data, ram_data : data_t;
+    attribute altera_attribute : string;
+    attribute altera_attribute of rst_pipe : signal is
+        "-name SYNCHRONIZER_IDENTIFICATION FORCED_IF_ASYNCHRONOUS";
+    attribute altera_attribute of sw_meta : signal is
+        "-name SYNCHRONIZER_IDENTIFICATION FORCED_IF_ASYNCHRONOUS";
+begin
+    process(CLOCK_50)
+    begin
+        if rising_edge(CLOCK_50) then
+            rst_pipe <= rst_pipe(0) & not BUTTON(0);
+        end if;
+    end process;
+    rst <= rst_pipe(1);
+
+"sincronizacion de las entradas de interruptores"
+
+    process(CLOCK_50)
+    begin
+        if rising_edge(CLOCK_50) then
+            if rst = '1' then
+                sw_meta <= (others => '0');
+                sw_sync <= (others => '0');
+            else
+                sw_meta <= SW;
+                sw_sync <= sw_meta;
+            end if;
+        end if;
+    end process;
+
+"esta parte del codigo es la encargada de procesar la señalizacion del sensor PIR"
+
+    u_pir : entity work.pir_controller
+        generic map (G_FILTER_CYCLES => G_FILTER_CYCLES)
+        port map (clk => CLOCK_50, rst => rst, pir_in => pir_in,
+                  pir_level => pir_level, event_pulse => event_pulse);
+
+"administra funcionamiento general del almacenamiento"
+
+    u_control : entity work.control_unit
+        port map (clk => CLOCK_50, rst => rst, event_pulse => event_pulse,
+                  rom_en => rom_en, ram_we => ram_we, busy => busy, full => full,
+                  rom_addr => rom_addr, ram_wr_addr => wr_addr, last_addr => last_addr,
+                  event_count => event_count, accepted_toggle => accepted_toggle);
+    u_rom : entity work.rom_memory
+        port map (clk => CLOCK_50, en => rom_en, addr => rom_addr, q => rom_data);
+    u_ram : entity work.ram_memory
+        port map (clk => CLOCK_50, we => ram_we, wr_addr => wr_addr,
+                  rd_addr => rd_addr, d => rom_data, q => ram_data);
+
+"permite seleccionar la direccion de consulta en la RAM"
+
+    rd_addr <= unsigned(sw_sync(ADDR_WIDTH-1 downto 0)) when sw_sync(9) = '1' else last_addr;
+
+    " Alinear direccion y validez con la latencia de lectura de RAM."
+
+    process(CLOCK_50)
+    begin
+        if rising_edge(CLOCK_50) then
+            if rst = '1' then
+                display_addr <= (others => '0');
+                display_valid <= '0';
+            else
+                display_addr <= rd_addr;
+                if resize(rd_addr, event_count'length) < event_count then
+                    display_valid <= '1';
+                else
+                    display_valid <= '0';
+                end if;
+            end if;
+        end if;
+    end process;
+
+"esta seccion se encarga de mostrar la informacion en los display."
+
+    HEX3_D <= hex7(std_logic_vector(display_addr));
+    HEX2_D <= "0111111";
+    HEX1_D <= hex7(ram_data(7 downto 4)) when display_valid = '1' else "0111111";
+    HEX0_D <= hex7(ram_data(3 downto 0)) when display_valid = '1' else "0111111";
+    HEX0_DP <= '1'; HEX1_DP <= '1'; HEX2_DP <= '1'; HEX3_DP <= '1';
+    LEDG(4 downto 0) <= std_logic_vector(event_count);
+    LEDG(5) <= pir_level;
+    LEDG(6) <= busy;
+    LEDG(7) <= full;
+    LEDG(8) <= display_valid;
+    LEDG(9) <= accepted_toggle;
+end architecture;
