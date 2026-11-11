@@ -1,0 +1,78 @@
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+use work.pkg_system.all;
+
+entity tb_top_system is end entity;
+architecture test of tb_top_system is
+    type lut_t is array(0 to 15) of seg7_t;
+    -- Tabla de referencia independiente de hex7().
+    constant DIGITS : lut_t := ("1000000","1111001","0100100","0110000",
+        "0011001","0010010","0000010","1111000","0000000","0010000",
+        "0001000","0000011","1000110","0100001","0000110","0001110");
+    type vals_t is array(0 to 15) of natural;
+    constant VALUES : vals_t := (16#11#,16#22#,16#33#,16#44#,16#55#,16#66#,16#77#,16#88#,
+        16#99#,16#AA#,16#BB#,16#CC#,16#DD#,16#EE#,16#F0#,16#0F#);
+    signal clk : std_logic := '0';
+    signal button : std_logic_vector(0 downto 0) := "0";
+    signal sw : std_logic_vector(9 downto 0) := (others=>'0');
+    signal pir : std_logic := '0';
+    signal led : std_logic_vector(9 downto 0);
+    signal h0,h1,h2,h3 : seg7_t;
+    signal dp : std_logic_vector(3 downto 0);
+    signal done : boolean := false;
+begin
+    clk <= not clk after 10 ns when not done else '0';
+    dut : entity work.top_system generic map (4)
+        port map(clk,button,sw,pir,led,h0,h1,h2,h3,dp(0),dp(1),dp(2),dp(3));
+    stimulus : process
+        procedure ticks(n : positive) is
+        begin
+            for i in 1 to n loop wait until rising_edge(clk); wait for 1 ns; end loop;
+        end procedure;
+        procedure check_display(a,v : natural) is
+        begin
+            assert h3=DIGITS(a) and h2="0111111" and h1=DIGITS(v/16) and h0=DIGITS(v mod 16)
+                report "Direccion/dato mal decodificados en displays" severity failure;
+            assert led(8)='1' and dp="1111" report "Validez/DP incorrectos" severity failure;
+        end procedure;
+        procedure motion is
+        begin
+            pir<='1'; ticks(18); pir<='0'; ticks(12);
+        end procedure;
+    begin
+        ticks(6); button<="1"; ticks(12);
+        assert led(4 downto 0)="00000" and led(8)='0' and h0="0111111" and h1="0111111"
+            report "Datos sin registrar no ocultos" severity failure;
+        report "P09 PASS: reset por boton activo bajo y datos invalidos ocultos";
+        motion; check_display(0,16#11#);
+        assert led(9)='1' report "Indicador de registro incorrecto" severity failure;
+        sw(9)<='1'; sw(3 downto 0)<=x"F"; ticks(8);
+        assert h3=DIGITS(15) and h0="0111111" and h1="0111111" and led(8)='0'
+            report "Direccion no escrita muestra dato" severity failure;
+        sw(9)<='0'; ticks(8); check_display(0,16#11#);
+        report "P10 PASS: modo automatico/manual y direccion no escrita";
+        for i in 1 to 15 loop
+            motion; check_display(i,VALUES(i));
+            assert to_integer(unsigned(led(4 downto 0)))=i+1 report "LED contador incorrecto" severity failure;
+        end loop;
+        assert led(7)='1' and led(9)='0' report "Indicadores de lleno/toggle incorrectos" severity failure;
+        sw(9)<='1';
+        for i in 0 to 15 loop
+            sw(3 downto 0)<=std_logic_vector(to_unsigned(i,4)); ticks(8);
+            check_display(i,VALUES(i));
+        end loop;
+        report "P11 PASS: 16 direcciones, codigos, segmentos y LEDs";
+        motion;
+        assert led(4 downto 0)="10000" report "Cuenta excede capacidad" severity failure;
+        button<="0"; ticks(8);
+        assert led(4 downto 0)="00000" and led(8)='0' and led(7)='0' and h0="0111111"
+            report "Reset revela datos antiguos" severity failure;
+        button<="1"; sw<=(others=>'0'); ticks(10); motion; check_display(0,16#11#);
+        report "P12 PASS: reset oculta RAM antigua y permite comenzar de nuevo";
+        report "TB_TOP_SYSTEM: ALL TESTS PASSED";
+        done<=true; wait;
+    end process;
+    watchdog : process
+    begin wait for 100 us; assert done report "Timeout tb_top_system" severity failure; wait; end process;
+end architecture;
